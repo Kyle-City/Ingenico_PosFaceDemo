@@ -1,2 +1,2 @@
-# Ingenico_Face_recognition
+# Ingenico_PosFaceDemo
 2026.7.13，银捷尼科公司实习项目，人脸识别
