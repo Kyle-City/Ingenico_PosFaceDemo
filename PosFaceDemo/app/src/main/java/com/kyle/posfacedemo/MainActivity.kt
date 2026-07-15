@@ -1,8 +1,8 @@
 package com.kyle.posfacedemo
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -19,7 +19,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         findViewById<Button>(R.id.startDeviceTestButton).setOnClickListener {
-            Toast.makeText(this, "设备测试准备完成", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, CameraPreviewActivity::class.java))
         }
     }
 }
