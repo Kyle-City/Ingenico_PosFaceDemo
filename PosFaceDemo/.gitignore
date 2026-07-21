@@ -16,3 +16,4 @@ local.properties
 signing.properties
 *.jks
 *.keystore
+app/src/debug/res/values/baidu_auth_local.xml

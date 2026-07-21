@@ -27,6 +27,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += "armeabi-v7a"
+        }
     }
 
     signingConfigs {
@@ -60,6 +64,7 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/baidu-face-sdk/facelibrary-release-8.5-composite-20251124.aar"))
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
