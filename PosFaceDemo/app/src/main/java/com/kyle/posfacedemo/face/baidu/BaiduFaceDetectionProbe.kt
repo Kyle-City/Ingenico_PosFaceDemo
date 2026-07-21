@@ -1,6 +1,7 @@
 package com.kyle.posfacedemo.face.baidu
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import android.os.SystemClock
 import android.util.Log
 import com.baidu.idl.main.facesdk.FaceInfo
@@ -18,12 +19,21 @@ object BaiduFaceDetectionProbe {
     private val pendingRegistrationRequest = AtomicReference<RegistrationRequestState?>(null)
     private val registering = AtomicBoolean(false)
 
-    fun requestRegistration(): RegistrationResult {
-        val request = PendingRegistrationRequest(SystemClock.elapsedRealtime())
+    fun requestRegistration(displayName: String): RegistrationResult {
+        val normalizedDisplayName = displayName.trim()
+        if (normalizedDisplayName.isEmpty()) {
+            return RegistrationResult.failed(RegistrationFailureReason.INVALID_DISPLAY_NAME)
+        }
+        val startedAtElapsedRealtime = SystemClock.elapsedRealtime()
+        val request = PendingRegistrationRequest(
+            startedAtElapsedRealtime = startedAtElapsedRealtime,
+            displayName = normalizedDisplayName,
+            collectingStartsAtElapsedRealtime = startedAtElapsedRealtime + REGISTRATION_PREPARE_DELAY_MS
+        )
         if (!pendingRegistrationRequest.compareAndSet(null, request)) {
             return RegistrationResult.failed(RegistrationFailureReason.REQUEST_ALREADY_PENDING)
         }
-        return RegistrationResult.waiting()
+        return RegistrationResult.preparing(requiredFrameCount = REGISTRATION_REQUIRED_VALID_FRAMES)
     }
 
     fun cancelRegistration(): RegistrationResult {
@@ -156,8 +166,14 @@ object BaiduFaceDetectionProbe {
             return RegistrationResult.idle(getUserCount(context))
         }
         if (request is RegisteringRegistrationRequest) {
-            return RegistrationResult(RegistrationState.REGISTERING, userCount = getUserCount(context))
+            return RegistrationResult(
+                RegistrationState.REGISTERING,
+                userCount = getUserCount(context),
+                requiredFrameCount = REGISTRATION_REQUIRED_VALID_FRAMES,
+                registrationStage = RegistrationStage.REGISTERING
+            )
         }
+        val pendingRequest = request as? PendingRegistrationRequest ?: return RegistrationResult.idle(getUserCount(context))
         if (request.isTimedOut()) {
             if (pendingRegistrationRequest.compareAndSet(request, null)) {
                 return logRegistration(
@@ -170,6 +186,10 @@ object BaiduFaceDetectionProbe {
             }
             return RegistrationResult.idle(getUserCount(context))
         }
+        val nowElapsedRealtime = SystemClock.elapsedRealtime()
+        if (nowElapsedRealtime < pendingRequest.collectingStartsAtElapsedRealtime) {
+            return logRegistrationProgress(RegistrationResult.preparing(getUserCount(context), REGISTRATION_REQUIRED_VALID_FRAMES))
+        }
         val gateFailure = when {
             imageInstance == null || faceInfo == null -> RegistrationFailureReason.NO_FACE
             quality.failureReason == FailureReason.FACE_TOO_SMALL -> RegistrationFailureReason.FACE_TOO_SMALL
@@ -180,18 +200,39 @@ object BaiduFaceDetectionProbe {
             else -> null
         }
         if (gateFailure != null) {
-            return RegistrationResult.waiting(getUserCount(context))
+            resetRegistrationProgress(pendingRequest)
+            return logRegistrationProgress(RegistrationResult.waiting(getUserCount(context), REGISTRATION_REQUIRED_VALID_FRAMES))
         }
         val validFaceInfo = faceInfo ?: return RegistrationResult.waiting(getUserCount(context))
         val validImageInstance = imageInstance ?: return RegistrationResult.waiting(getUserCount(context))
-        val registeringRequest = RegisteringRegistrationRequest(request.startedAtElapsedRealtime)
-        if (!pendingRegistrationRequest.compareAndSet(request, registeringRequest)) {
+        if (nowElapsedRealtime - pendingRequest.lastAcceptedFrameElapsedRealtime < REGISTRATION_MIN_FRAME_INTERVAL_MS) {
+            return logRegistrationProgress(
+                if (pendingRequest.collectedFrameCount > 0) {
+                    RegistrationResult.collecting(pendingRequest.collectedFrameCount, REGISTRATION_REQUIRED_VALID_FRAMES, getUserCount(context))
+                } else {
+                    RegistrationResult.waiting(getUserCount(context), REGISTRATION_REQUIRED_VALID_FRAMES)
+                }
+            )
+        }
+        val nextCollectedFrameCount = pendingRequest.collectedFrameCount + 1
+        if (nextCollectedFrameCount < REGISTRATION_REQUIRED_VALID_FRAMES) {
+            val updatedRequest = pendingRequest.copy(
+                collectedFrameCount = nextCollectedFrameCount,
+                lastAcceptedFrameElapsedRealtime = nowElapsedRealtime
+            )
+            if (!pendingRegistrationRequest.compareAndSet(pendingRequest, updatedRequest)) {
+                return RegistrationResult.idle(getUserCount(context))
+            }
+            return logRegistrationProgress(RegistrationResult.collecting(nextCollectedFrameCount, REGISTRATION_REQUIRED_VALID_FRAMES, getUserCount(context)))
+        }
+        val registeringRequest = RegisteringRegistrationRequest(pendingRequest.startedAtElapsedRealtime, pendingRequest.displayName)
+        if (!pendingRegistrationRequest.compareAndSet(pendingRequest, registeringRequest)) {
             return RegistrationResult.idle(getUserCount(context))
         }
         if (!registering.compareAndSet(false, true)) {
             return logRegistration(RegistrationResult.failed(RegistrationFailureReason.REQUEST_ALREADY_PENDING, userCount = getUserCount(context)))
         }
-        val startTime = System.currentTimeMillis()
+        val startTime = SystemClock.elapsedRealtime()
         val featureBuffer = ByteArray(FEATURE_BUFFER_SIZE)
         return try {
             val faceFeature = BaiduModelInitializationProbe.getLivePhotoFaceFeature()
@@ -206,29 +247,49 @@ object BaiduFaceDetectionProbe {
             }
             Log.i(REGISTER_TAG, "featureSizeReturned=$featureSize")
             if (featureSize != FEATURE_SUCCESS_SIZE) {
-                return consumeRegisteringFailure(registeringRequest, RegistrationFailureReason.FEATURE_EXTRACTION_FAILED, System.currentTimeMillis() - startTime, context)
+                return consumeRegisteringFailure(registeringRequest, RegistrationFailureReason.FEATURE_EXTRACTION_FAILED, SystemClock.elapsedRealtime() - startTime, context)
             }
             if (!pendingRegistrationRequest.compareAndSet(registeringRequest, null)) {
                 return RegistrationResult.idle(getUserCount(context))
             }
             val repository = LocalFaceRepository(context)
             try {
-                val saved = repository.saveOrReplaceTestUser(LocalFaceRepository.TEST_USER_ID, featureBuffer.copyOf())
-                if (saved) {
-                    logRegistration(RegistrationResult.success(System.currentTimeMillis() - startTime, repository.getUserCount()))
+                val createdUser = repository.createUser(registeringRequest.displayName, featureBuffer.copyOf())
+                if (createdUser != null) {
+                    logRegistration(RegistrationResult.success(SystemClock.elapsedRealtime() - startTime, repository.getUserCount(), createdUser.displayName))
                 } else {
-                    logRegistration(RegistrationResult.failed(RegistrationFailureReason.DATABASE_WRITE_FAILED, System.currentTimeMillis() - startTime, repository.getUserCount()))
+                    logRegistration(RegistrationResult.failed(RegistrationFailureReason.DATABASE_WRITE_FAILED, SystemClock.elapsedRealtime() - startTime, repository.getUserCount()))
                 }
             } finally {
                 repository.close()
             }
+        } catch (exception: SQLiteConstraintException) {
+            Log.i(REGISTER_TAG, "exceptionType=${exception.javaClass.name}")
+            consumeRegisteringFailure(registeringRequest, RegistrationFailureReason.DATABASE_CONSTRAINT_FAILED, SystemClock.elapsedRealtime() - startTime, context)
         } catch (exception: Exception) {
             Log.i(REGISTER_TAG, "exceptionType=${exception.javaClass.name}")
-            consumeRegisteringFailure(registeringRequest, RegistrationFailureReason.EXCEPTION, System.currentTimeMillis() - startTime, context)
+            consumeRegisteringFailure(registeringRequest, RegistrationFailureReason.EXCEPTION, SystemClock.elapsedRealtime() - startTime, context)
         } finally {
             featureBuffer.fill(0)
             registering.set(false)
         }
+    }
+
+    private fun resetRegistrationProgress(request: PendingRegistrationRequest) {
+        if (request.collectedFrameCount == 0 && request.lastAcceptedFrameElapsedRealtime == 0L) return
+        pendingRegistrationRequest.compareAndSet(
+            request,
+            request.copy(collectedFrameCount = 0, lastAcceptedFrameElapsedRealtime = 0L)
+        )
+    }
+
+    private fun logRegistrationProgress(result: RegistrationResult): RegistrationResult {
+        Log.i(REGISTER_TAG, "registrationStage=${result.registrationStage}")
+        Log.i(REGISTER_TAG, "collectedFrameCount=${result.collectedFrameCount}")
+        Log.i(REGISTER_TAG, "requiredFrameCount=${result.requiredFrameCount}")
+        Log.i(REGISTER_TAG, "prepareDelayMs=$REGISTRATION_PREPARE_DELAY_MS")
+        Log.i(REGISTER_TAG, "minFrameIntervalMs=$REGISTRATION_MIN_FRAME_INTERVAL_MS")
+        return result
     }
 
     private fun handleIdentification(
@@ -271,8 +332,11 @@ object BaiduFaceDetectionProbe {
 
     private fun logRegistration(result: RegistrationResult): RegistrationResult {
         Log.i(REGISTER_TAG, "state=${result.state}")
+        Log.i(REGISTER_TAG, "registrationStage=${result.registrationStage}")
         Log.i(REGISTER_TAG, "durationMs=${result.durationMs}")
         Log.i(REGISTER_TAG, "userCount=${result.userCount}")
+        Log.i(REGISTER_TAG, "collectedFrameCount=${result.collectedFrameCount}")
+        Log.i(REGISTER_TAG, "requiredFrameCount=${result.requiredFrameCount}")
         result.failureReason?.let { Log.i(REGISTER_TAG, "failureReason=$it") }
         return result
     }
@@ -392,16 +456,22 @@ object BaiduFaceDetectionProbe {
 
     private sealed interface RegistrationRequestState {
         val startedAtElapsedRealtime: Long
+        val displayName: String
         fun elapsedMs(): Long = SystemClock.elapsedRealtime() - startedAtElapsedRealtime
         fun isTimedOut(): Boolean = elapsedMs() >= REGISTRATION_TIMEOUT_MS
     }
 
     data class PendingRegistrationRequest(
-        override val startedAtElapsedRealtime: Long
+        override val startedAtElapsedRealtime: Long,
+        override val displayName: String,
+        val collectingStartsAtElapsedRealtime: Long,
+        val collectedFrameCount: Int = 0,
+        val lastAcceptedFrameElapsedRealtime: Long = 0L
     ) : RegistrationRequestState
 
     private data class RegisteringRegistrationRequest(
-        override val startedAtElapsedRealtime: Long
+        override val startedAtElapsedRealtime: Long,
+        override val displayName: String
     ) : RegistrationRequestState
 
     data class FaceBox(
@@ -497,6 +567,9 @@ object BaiduFaceDetectionProbe {
     private const val RIGHT_CHEEK_THRESHOLD = 0.8f
     private const val CHIN_THRESHOLD = 0.8f
     private const val RGB_LIVENESS_THRESHOLD = 0.80f
+    private const val REGISTRATION_PREPARE_DELAY_MS = 1_500L
+    private const val REGISTRATION_REQUIRED_VALID_FRAMES = 3
+    private const val REGISTRATION_MIN_FRAME_INTERVAL_MS = 500L
     private const val REGISTRATION_TIMEOUT_MS = 10_000L
     private const val FEATURE_BUFFER_SIZE = 512
     private const val FEATURE_SUCCESS_SIZE = 128f

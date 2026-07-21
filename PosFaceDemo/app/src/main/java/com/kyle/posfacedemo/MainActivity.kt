@@ -16,9 +16,21 @@ import androidx.core.view.WindowInsetsCompat
 import com.kyle.posfacedemo.face.baidu.BaiduOnlineActivationProbe
 import com.kyle.posfacedemo.face.baidu.BaiduAuthorizationProbe
 import com.kyle.posfacedemo.face.baidu.BaiduDeviceIdentityProbe
+import com.kyle.posfacedemo.face.baidu.LocalFaceRepository
 import com.kyle.posfacedemo.face.baidu.BaiduModelInitializationProbe
+import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity() {
+    private lateinit var debugToolsToggleButton: Button
+    private lateinit var debugToolsContainer: View
+    private lateinit var baiduAuthResultText: TextView
+    private lateinit var baiduModelResultText: TextView
+    private lateinit var testUserCountValueText: TextView
+    private lateinit var debugFeedbackText: TextView
+    private lateinit var startFaceRecognitionButton: Button
+    private var destroyed = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -28,86 +40,251 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        findViewById<Button>(R.id.startDeviceTestButton).setOnClickListener {
+        activeActivity = WeakReference(this)
+        startFaceRecognitionButton = findViewById(R.id.startDeviceTestButton)
+        startFaceRecognitionButton.isEnabled = false
+        startFaceRecognitionButton.setOnClickListener {
             startActivity(Intent(this, CameraPreviewActivity::class.java))
         }
+        debugToolsToggleButton = findViewById(R.id.debugToolsToggleButton)
+        debugToolsContainer = findViewById(R.id.debugToolsContainer)
+        baiduAuthResultText = findViewById(R.id.baiduAuthResultText)
+        baiduModelResultText = findViewById(R.id.baiduModelResultText)
+        testUserCountValueText = findViewById(R.id.testUserCountValueText)
+        debugFeedbackText = findViewById(R.id.debugFeedbackText)
+        updateHomeStatus()
+        startAutomaticInitializationIfNeeded()
         findViewById<Button>(R.id.checkBaiduDeviceButton).setOnClickListener {
+            setDebugFeedback(getString(R.string.debug_device_checking), R.color.poc_primary)
             val success = BaiduDeviceIdentityProbe().check(this)
-            findViewById<TextView>(R.id.baiduDeviceResultText).text = if (success) {
-                "检查成功"
+            if (success) {
+                setDebugFeedback(getString(R.string.debug_device_check_success), R.color.poc_success)
             } else {
-                "检查失败"
+                setDebugFeedback(getString(R.string.debug_device_check_failed), R.color.poc_error)
             }
         }
         findViewById<Button>(R.id.checkBaiduAuthButton).setOnClickListener {
+            setDebugFeedback(getString(R.string.debug_auth_checking), R.color.poc_primary)
             val result = BaiduAuthorizationProbe().check(this)
-            findViewById<TextView>(R.id.baiduAuthResultText).text = when (result) {
-                BaiduAuthorizationProbe.Result.AUTHORIZED -> "已授权"
-                BaiduAuthorizationProbe.Result.UNAUTHORIZED -> "未授权"
-                BaiduAuthorizationProbe.Result.FAILED -> "检查失败"
+            updateAuthorizationStatus(result)
+            when (result) {
+                BaiduAuthorizationProbe.Result.AUTHORIZED -> setDebugFeedback(getString(R.string.debug_auth_ready), R.color.poc_success)
+                BaiduAuthorizationProbe.Result.UNAUTHORIZED -> setDebugFeedback(getString(R.string.debug_auth_not_ready), R.color.poc_warning)
+                BaiduAuthorizationProbe.Result.FAILED -> setDebugFeedback(getString(R.string.debug_auth_check_failed), R.color.poc_error)
             }
         }
         val activateBaiduButton = findViewById<Button>(R.id.activateBaiduButton)
-        val activateBaiduResultText = findViewById<TextView>(R.id.baiduActivationResultText)
         if (isDebuggable()) {
-            activateBaiduButton.visibility = View.VISIBLE
-            activateBaiduResultText.visibility = View.VISIBLE
+            debugToolsToggleButton.visibility = View.VISIBLE
+            debugToolsToggleButton.setOnClickListener { toggleDebugTools() }
             activateBaiduButton.setOnClickListener {
-                showBaiduActivationDialog(activateBaiduResultText)
+                showBaiduActivationDialog()
             }
-            findViewById<Button>(R.id.initBaiduModelButton).visibility = View.VISIBLE
-            findViewById<TextView>(R.id.baiduModelResultText).visibility = View.VISIBLE
             findViewById<Button>(R.id.initBaiduModelButton).setOnClickListener {
-                val modelResultText = findViewById<TextView>(R.id.baiduModelResultText)
-                modelResultText.text = "初始化中"
-                BaiduModelInitializationProbe.initialize(this) { result ->
-                    runOnUiThread {
-                        modelResultText.text = when (result) {
-                            is BaiduModelInitializationProbe.Result.Success -> "初始化成功"
-                            is BaiduModelInitializationProbe.Result.Failed -> "初始化失败：${result.code}"
-                        }
-                    }
-                }
+                restartModelInitializationForDebug()
             }
         } else {
-            activateBaiduButton.visibility = View.GONE
-            activateBaiduResultText.visibility = View.GONE
-            findViewById<Button>(R.id.initBaiduModelButton).visibility = View.GONE
-            findViewById<TextView>(R.id.baiduModelResultText).visibility = View.GONE
+            debugToolsToggleButton.visibility = View.GONE
+            debugToolsContainer.visibility = View.GONE
         }
     }
 
-    private fun showBaiduActivationDialog(resultText: TextView) {
+    override fun onResume() {
+        super.onResume()
+        activeActivity = WeakReference(this)
+        if (::testUserCountValueText.isInitialized) {
+            updateHomeStatus()
+        }
+    }
+
+    override fun onDestroy() {
+        destroyed = true
+        if (activeActivity.get() === this) {
+            activeActivity = WeakReference(null)
+        }
+        super.onDestroy()
+    }
+
+    private fun updateHomeStatus() {
+        if (BaiduModelInitializationProbe.getLivePhotoFaceFeature() != null) {
+            autoInitState = AutoInitState.READY
+        }
+        renderAutoInitState(autoInitState)
+        val repository = LocalFaceRepository(this)
+        val userCount = try {
+            repository.getUserCount()
+        } finally {
+            repository.close()
+        }
+        testUserCountValueText.text = getString(R.string.status_user_count_format, userCount)
+        testUserCountValueText.setTextColor(getColor(if (userCount > 0) R.color.poc_success else R.color.poc_neutral))
+    }
+
+    private fun startAutomaticInitializationIfNeeded() {
+        if (BaiduModelInitializationProbe.getLivePhotoFaceFeature() != null) {
+            autoInitState = AutoInitState.READY
+            renderAutoInitState(autoInitState)
+            return
+        }
+        if (!autoInitSubmitted.compareAndSet(false, true)) {
+            renderAutoInitState(autoInitState)
+            return
+        }
+        autoInitState = AutoInitState.CHECKING_AUTH
+        renderAutoInitState(autoInitState)
+        Thread {
+            val authResult = BaiduAuthorizationProbe().check(applicationContext)
+            if (authResult != BaiduAuthorizationProbe.Result.AUTHORIZED) {
+                autoInitState = AutoInitState.UNAUTHORIZED
+                renderActiveAutoInitState()
+                return@Thread
+            }
+            autoInitState = AutoInitState.INITIALIZING
+            renderActiveAutoInitState()
+            BaiduModelInitializationProbe.initialize(applicationContext) { result ->
+                autoInitState = when (result) {
+                    is BaiduModelInitializationProbe.Result.Success -> AutoInitState.READY
+                    is BaiduModelInitializationProbe.Result.Failed -> AutoInitState.FAILED
+                }
+                renderActiveAutoInitState()
+            }
+        }.start()
+    }
+
+    private fun restartModelInitializationForDebug() {
+        setDebugFeedback(getString(R.string.debug_model_init_checking), R.color.poc_primary)
+        autoInitState = AutoInitState.INITIALIZING
+        renderAutoInitState(autoInitState)
+        BaiduModelInitializationProbe.initialize(applicationContext) { result ->
+            autoInitState = when (result) {
+                is BaiduModelInitializationProbe.Result.Success -> AutoInitState.READY
+                is BaiduModelInitializationProbe.Result.Failed -> AutoInitState.FAILED
+            }
+            renderActiveAutoInitState()
+            activeActivity.get()?.safeRunOnUiThread {
+                when (result) {
+                    is BaiduModelInitializationProbe.Result.Success -> setDebugFeedback(getString(R.string.debug_model_init_success), R.color.poc_success)
+                    is BaiduModelInitializationProbe.Result.Failed -> setDebugFeedback(getString(R.string.debug_model_init_failed), R.color.poc_error)
+                }
+            }
+        }
+    }
+
+    private fun renderActiveAutoInitState() {
+        activeActivity.get()?.safeRunOnUiThread {
+            renderAutoInitState(autoInitState)
+        }
+    }
+
+    private fun renderAutoInitState(state: AutoInitState) {
+        if (!::startFaceRecognitionButton.isInitialized) return
+        when (state) {
+            AutoInitState.NOT_STARTED -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_not_ready), R.color.poc_neutral)
+                setStatus(baiduModelResultText, getString(R.string.status_model_not_initialized), R.color.poc_neutral)
+                startFaceRecognitionButton.isEnabled = false
+            }
+            AutoInitState.CHECKING_AUTH -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_checking), R.color.poc_primary)
+                setStatus(baiduModelResultText, getString(R.string.status_model_not_initialized), R.color.poc_neutral)
+                startFaceRecognitionButton.isEnabled = false
+            }
+            AutoInitState.UNAUTHORIZED -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_not_ready), R.color.poc_warning)
+                setStatus(baiduModelResultText, getString(R.string.status_model_not_initialized), R.color.poc_neutral)
+                startFaceRecognitionButton.isEnabled = false
+            }
+            AutoInitState.INITIALIZING -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_ready), R.color.poc_success)
+                setStatus(baiduModelResultText, getString(R.string.status_checking), R.color.poc_primary)
+                startFaceRecognitionButton.isEnabled = false
+            }
+            AutoInitState.READY -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_ready), R.color.poc_success)
+                setStatus(baiduModelResultText, getString(R.string.status_ready), R.color.poc_success)
+                startFaceRecognitionButton.isEnabled = true
+            }
+            AutoInitState.FAILED -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_ready), R.color.poc_success)
+                setStatus(baiduModelResultText, getString(R.string.model_init_failed_user), R.color.poc_error)
+                startFaceRecognitionButton.isEnabled = false
+            }
+        }
+    }
+
+    private fun updateAuthorizationStatus(result: BaiduAuthorizationProbe.Result) {
+        when (result) {
+            BaiduAuthorizationProbe.Result.AUTHORIZED -> {
+                setStatus(baiduAuthResultText, getString(R.string.status_ready), R.color.poc_success)
+                if (autoInitState == AutoInitState.UNAUTHORIZED) {
+                    autoInitSubmitted.set(false)
+                    startAutomaticInitializationIfNeeded()
+                }
+            }
+            BaiduAuthorizationProbe.Result.UNAUTHORIZED -> setStatus(baiduAuthResultText, getString(R.string.status_not_ready), R.color.poc_warning)
+            BaiduAuthorizationProbe.Result.FAILED -> setStatus(baiduAuthResultText, getString(R.string.debug_check_failed), R.color.poc_error)
+        }
+    }
+
+    private fun safeRunOnUiThread(action: () -> Unit) {
+        if (destroyed || isFinishing) return
+        runOnUiThread {
+            if (!destroyed && !isFinishing) {
+                action()
+            }
+        }
+    }
+
+    private fun setStatus(textView: TextView, text: String, colorRes: Int) {
+        textView.text = text
+        textView.setTextColor(getColor(colorRes))
+    }
+
+    private fun setDebugFeedback(text: String, colorRes: Int) {
+        if (!::debugFeedbackText.isInitialized) return
+        debugFeedbackText.text = text
+        debugFeedbackText.setTextColor(getColor(colorRes))
+        debugFeedbackText.visibility = View.VISIBLE
+    }
+
+    private fun toggleDebugTools() {
+        val show = debugToolsContainer.visibility != View.VISIBLE
+        debugToolsContainer.visibility = if (show) View.VISIBLE else View.GONE
+        debugToolsToggleButton.text = getString(if (show) R.string.debug_tools_hide else R.string.debug_tools_show)
+    }
+
+    private fun showBaiduActivationDialog() {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
         }
         AlertDialog.Builder(this)
-            .setTitle("在线激活百度授权")
+            .setTitle(R.string.debug_activation_title)
             .setView(input)
-            .setPositiveButton("激活") { _, _ ->
+            .setPositiveButton(R.string.debug_activation_action) { _, _ ->
                 val licenseChars = input.text?.toString()?.trim()?.toCharArray()
                 input.text?.clear()
                 if (licenseChars == null) {
-                    resultText.text = "序列号格式错误"
+                    setDebugFeedback(getString(R.string.debug_license_format_error), R.color.poc_error)
                     return@setPositiveButton
                 }
                 val currentLicenseId = String(licenseChars)
                 licenseChars.fill('\u0000')
                 if (!LICENSE_FORMAT.matches(currentLicenseId)) {
-                    resultText.text = "序列号格式错误"
+                    setDebugFeedback(getString(R.string.debug_license_format_error), R.color.poc_error)
                     return@setPositiveButton
                 }
+                setDebugFeedback(getString(R.string.debug_activation_checking), R.color.poc_primary)
                 BaiduOnlineActivationProbe().activate(this, currentLicenseId) { result ->
                     runOnUiThread {
-                        resultText.text = when (result) {
-                            BaiduOnlineActivationProbe.Result.Success -> "激活成功"
-                            is BaiduOnlineActivationProbe.Result.Failed -> "激活失败：${result.code}"
-                            BaiduOnlineActivationProbe.Result.CheckFailed -> "激活失败：检查失败"
+                        when (result) {
+                            BaiduOnlineActivationProbe.Result.Success -> setDebugFeedback(getString(R.string.debug_activation_success), R.color.poc_success)
+                            is BaiduOnlineActivationProbe.Result.Failed -> setDebugFeedback(getString(R.string.debug_activation_failed), R.color.poc_error)
+                            BaiduOnlineActivationProbe.Result.CheckFailed -> setDebugFeedback(getString(R.string.debug_activation_failed), R.color.poc_error)
                         }
                     }
                 }
             }
-            .setNegativeButton("取消") { _, _ ->
+            .setNegativeButton(R.string.common_cancel) { _, _ ->
                 input.text?.clear()
             }
             .show()
@@ -119,5 +296,19 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         val LICENSE_FORMAT = Regex("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$")
+        private val autoInitSubmitted = AtomicBoolean(false)
+        @Volatile
+        private var autoInitState = AutoInitState.NOT_STARTED
+        @Volatile
+        private var activeActivity = WeakReference<MainActivity?>(null)
+    }
+
+    private enum class AutoInitState {
+        NOT_STARTED,
+        CHECKING_AUTH,
+        UNAUTHORIZED,
+        INITIALIZING,
+        READY,
+        FAILED
     }
 }

@@ -1,162 +1,194 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="24dp"
+    android:background="@color/poc_bg"
+    android:fillViewport="true"
     tools:context=".MainActivity">
 
-    <TextView
-        android:id="@+id/titleText"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:text="POS Face Demo"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/internalNoticeText"
-        app:layout_constraintVertical_chainStyle="packed" />
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="24dp">
 
-    <TextView
-        android:id="@+id/internalNoticeText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:gravity="center"
-        android:text="当前仅用于内部技术验证"
-        android:textSize="18sp"
-        app:layout_constraintBottom_toTopOf="@id/paymentNoticeText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/titleText" />
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/home_title"
+            android:textColor="@color/poc_text_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/paymentNoticeText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text="不会发起真实支付"
-        android:textSize="18sp"
-        app:layout_constraintBottom_toTopOf="@id/startDeviceTestButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/internalNoticeText" />
+        <TextView
+            android:id="@+id/subtitleText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/home_subtitle"
+            android:textColor="@color/poc_text_secondary"
+            android:textSize="16sp" />
 
-    <Button
-        android:id="@+id/startDeviceTestButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="开始设备测试"
-        app:layout_constraintBottom_toTopOf="@id/checkBaiduDeviceButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/paymentNoticeText" />
+        <TextView
+            android:id="@+id/internalNoticeText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/home_scope_note"
+            android:textColor="@color/poc_text_secondary"
+            android:textSize="14sp" />
 
-    <Button
-        android:id="@+id/checkBaiduDeviceButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="检查百度设备环境"
-        app:layout_constraintBottom_toTopOf="@id/baiduDeviceResultText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/startDeviceTestButton" />
+        <LinearLayout
+            android:id="@+id/statusPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@color/poc_panel_light"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    <TextView
-        android:id="@+id/baiduDeviceResultText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text=""
-        android:textSize="18sp"
-        app:layout_constraintBottom_toTopOf="@id/checkBaiduAuthButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/checkBaiduDeviceButton" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/home_status_auth"
+                android:textColor="@color/poc_text_secondary"
+                android:textSize="14sp" />
 
-    <Button
-        android:id="@+id/checkBaiduAuthButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="检查百度授权状态"
-        app:layout_constraintBottom_toTopOf="@id/baiduAuthResultText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/baiduDeviceResultText" />
+            <TextView
+                android:id="@+id/baiduAuthResultText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/status_not_ready"
+                android:textColor="@color/poc_neutral"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/baiduAuthResultText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text=""
-        android:textSize="18sp"
-        app:layout_constraintBottom_toTopOf="@id/activateBaiduButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/checkBaiduAuthButton" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/home_status_model"
+                android:textColor="@color/poc_text_secondary"
+                android:textSize="14sp" />
 
-    <Button
-        android:id="@+id/activateBaiduButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="在线激活百度授权"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/baiduActivationResultText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/baiduAuthResultText" />
+            <TextView
+                android:id="@+id/baiduModelResultText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/status_not_ready"
+                android:textColor="@color/poc_neutral"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/baiduActivationResultText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text=""
-        android:textSize="18sp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/initBaiduModelButton"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/activateBaiduButton" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/home_status_user_count"
+                android:textColor="@color/poc_text_secondary"
+                android:textSize="14sp" />
 
-    <Button
-        android:id="@+id/initBaiduModelButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="初始化百度人脸模型"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/baiduModelResultText"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/baiduActivationResultText" />
+            <TextView
+                android:id="@+id/testUserCountValueText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/poc_neutral"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                tools:text="0 人" />
+        </LinearLayout>
 
-    <TextView
-        android:id="@+id/baiduModelResultText"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:text=""
-        android:textSize="18sp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/initBaiduModelButton" />
+        <Button
+            android:id="@+id/startDeviceTestButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="20dp"
+            android:text="@string/home_primary_action" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <Button
+            android:id="@+id/debugToolsToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:text="@string/debug_tools_show" />
+
+        <LinearLayout
+            android:id="@+id/debugToolsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@color/poc_panel_light"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/debug_tools_title"
+                android:textColor="@color/poc_text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/debugButtonGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical">
+
+                <Button
+                    android:id="@+id/checkBaiduDeviceButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="0dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="@string/debug_device_check" />
+
+                <Button
+                    android:id="@+id/checkBaiduAuthButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="@string/debug_auth_check" />
+
+                <Button
+                    android:id="@+id/activateBaiduButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="@string/debug_online_activation" />
+
+                <Button
+                    android:id="@+id/initBaiduModelButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="0dp"
+                    android:text="@string/debug_model_init" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/debugFeedbackText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:maxLines="2"
+                android:text=""
+                android:textColor="@color/poc_text_secondary"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

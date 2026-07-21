@@ -2,4 +2,15 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="poc_bg">#F5F7FA</color>
+    <color name="poc_text_primary">#1F2933</color>
+    <color name="poc_text_secondary">#52606D</color>
+    <color name="poc_panel_dark">#CC101820</color>
+    <color name="poc_panel_light">#FFFFFFFF</color>
+    <color name="poc_primary">#1E66F5</color>
+    <color name="poc_success">#1F8A4C</color>
+    <color name="poc_warning">#B7791F</color>
+    <color name="poc_error">#C2413A</color>
+    <color name="poc_neutral">#667085</color>
+    <color name="poc_chip_bg">#E8F1FF</color>
 </resources>

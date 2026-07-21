@@ -26,7 +26,7 @@ object BaiduFaceIdentificationService {
             ?: return IdentificationResult.error(IdentificationFailureReason.MODEL_NOT_READY, userCount = loadedUserCount)
         val repository = LocalFaceRepository(context)
         return try {
-            val users = repository.getAllTestUsers()
+            val users = repository.getFeatureRecordsForSearch()
             synchronized(faceSearch) {
                 faceSearch.featureClear()
                 users.forEach { user ->
